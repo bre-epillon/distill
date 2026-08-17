@@ -1,0 +1,28 @@
+---
+interface Props {
+  id: string;
+  title: string;
+  author: string;
+  oneLine: string;
+  cover: string;
+  accent: string;
+  readingTime: number;
+  rating?: number;
+  topics: string[];
+}
+const { id, title, author, oneLine, cover, accent, readingTime, rating, topics } =
+  Astro.props;
+const stars = rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : null;
+---
+
+<a class="card" href={`/summaries/${id}/`} style={`--card-accent:${accent}`}>
+  <div class="cover">{cover}</div>
+  <h3>{title}</h3>
+  <p class="byline">{author}</p>
+  <p class="oneline">{oneLine}</p>
+  <div class="meta">
+    <span>{readingTime} min read</span>
+    {stars && <span class="stars" title={`${rating}/5`}>{stars}</span>}
+    {topics[0] && <span class="chip neutral">{topics[0]}</span>}
+  </div>
+</a>

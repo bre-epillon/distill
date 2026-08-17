@@ -1,0 +1,103 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export async function getStaticPaths() {
+  const summaries = (await getCollection('summaries')).filter(
+    (s) => !s.data.draft,
+  );
+  return summaries.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+const d = entry.data;
+
+// Resolve connection slugs → titles so we can render nice link cards.
+const all = await getCollection('summaries');
+const bySlug = new Map(all.map((s) => [s.id, s.data]));
+const connections = d.connections
+  .map((c) => ({ ...c, target: bySlug.get(c.slug) }))
+  .filter((c) => c.target);
+
+const fmt = (dt?: Date) =>
+  dt
+    ? new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(
+        dt,
+      )
+    : null;
+const stars = d.rating ? '★'.repeat(d.rating) + '☆'.repeat(5 - d.rating) : null;
+---
+
+<BaseLayout title={`${d.title} — Distil`} description={d.oneLine}>
+  <article class="reader" style={`--accent:${d.accent}`}>
+    <a class="back" href="/">← Library</a>
+
+    <span class="kicker">{d.cover} {d.author}</span>
+    <h1>{d.title}</h1>
+
+    <p class="oneline">{d.oneLine}</p>
+
+    <div class="readmeta">
+      <span>{d.readingTime} min read</span>
+      {stars && <span style={`color:${d.accent}`}>{stars}</span>}
+      {d.readDate && <span>Read {fmt(d.readDate)}</span>}
+      <div class="chips" style="gap:6px">
+        {d.topics.map((t) => (
+          <a class="chip" href={`/topics/${t.replace(/\s+/g, '-').toLowerCase()}/`}>
+            {t}
+          </a>
+        ))}
+      </div>
+    </div>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    {
+      d.keyPrinciples.length > 0 && (
+        <div class="panel">
+          <h2>Key principles</h2>
+          <p class="panel-sub">
+            Atomic notes — each one is a card for your Zettelkasten.
+          </p>
+          {d.keyPrinciples.map((p, i) => (
+            <div class="principle">
+              <span class="num">{i + 1}</span>
+              <p class="ptext">
+                {p.text}
+                <span class="pid">#{p.id}</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    {
+      connections.length > 0 && (
+        <div class="panel">
+          <h2>Connections</h2>
+          <p class="panel-sub">
+            How this book talks to others in the library.
+          </p>
+          {connections.map((c) => (
+            <a class="connection" href={`/summaries/${c.slug}/`}>
+              <span class="ctitle">
+                {c.target.cover} {c.target.title}
+                <span class="muted" style="font-weight:400">
+                  · {c.target.author}
+                </span>
+              </span>
+              <p class="cnote">{c.note}</p>
+            </a>
+          ))}
+        </div>
+      )
+    }
+  </article>
+</BaseLayout>

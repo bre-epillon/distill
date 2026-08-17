@@ -1,0 +1,52 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SummaryCard from '../../components/SummaryCard.astro';
+
+const slug = (t: string) => t.replace(/\s+/g, '-').toLowerCase();
+
+export async function getStaticPaths() {
+  const all = (await getCollection('summaries')).filter((s) => !s.data.draft);
+  const map = new Map<string, { label: string; items: typeof all }>();
+  for (const s of all) {
+    for (const t of s.data.topics) {
+      const key = t.replace(/\s+/g, '-').toLowerCase();
+      if (!map.has(key)) map.set(key, { label: t, items: [] });
+      map.get(key)!.items.push(s);
+    }
+  }
+  return [...map.entries()].map(([topic, { label, items }]) => ({
+    params: { topic },
+    props: { label, items },
+  }));
+}
+
+const { label, items } = Astro.props;
+---
+
+<BaseLayout title={`${label} — Distil`}>
+  <section class="wrap hero">
+    <a class="back" href="/topics">← Topics</a>
+    <h1>{label}</h1>
+    <p>{items.length} {items.length === 1 ? 'summary' : 'summaries'} on this topic.</p>
+  </section>
+  <section class="wrap">
+    <div class="grid">
+      {
+        items.map((s) => (
+          <SummaryCard
+            id={s.id}
+            title={s.data.title}
+            author={s.data.author}
+            oneLine={s.data.oneLine}
+            cover={s.data.cover}
+            accent={s.data.accent}
+            readingTime={s.data.readingTime}
+            rating={s.data.rating}
+            topics={s.data.topics}
+          />
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>

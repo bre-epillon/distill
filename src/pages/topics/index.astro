@@ -1,0 +1,34 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const all = (await getCollection('summaries')).filter((s) => !s.data.draft);
+
+const counts = new Map<string, number>();
+for (const s of all) {
+  for (const t of s.data.topics) {
+    counts.set(t, (counts.get(t) || 0) + 1);
+  }
+}
+const topics = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+const slug = (t: string) => t.replace(/\s+/g, '-').toLowerCase();
+---
+
+<BaseLayout title="Topics — Distil">
+  <section class="wrap hero">
+    <h1>Topics</h1>
+    <p>The threads that run across the library. Follow a topic to see every book that touches it.</p>
+  </section>
+  <section class="wrap">
+    <div class="chips" style="gap:10px">
+      {
+        topics.map(([t, n]) => (
+          <a class="chip" href={`/topics/${slug(t)}/`} style="font-size:0.95rem;padding:8px 15px">
+            {t}
+            <span style="opacity:0.6">{n}</span>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>

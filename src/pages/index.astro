@@ -1,0 +1,94 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SummaryCard from '../components/SummaryCard.astro';
+
+const all = (await getCollection('summaries'))
+  .filter((s) => !s.data.draft)
+  .sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf());
+
+// Flatten every atomic principle across every book — this feeds the
+// "Idea of the day" engagement hook (a daily-rotating spark).
+const sparks = all.flatMap((s) =>
+  s.data.keyPrinciples.map((p) => ({
+    text: p.text,
+    book: s.data.title,
+    author: s.data.author,
+    slug: s.id,
+    accent: s.data.accent,
+  })),
+);
+---
+
+<BaseLayout title="Distil — a library of distilled ideas">
+  <section class="wrap hero">
+    <h1>The ideas worth remembering,<br />distilled.</h1>
+    <p>
+      A personal library of the most insightful books — read closely, boiled
+      down to what matters, and wired together so ideas talk to each other.
+    </p>
+  </section>
+
+  {
+    sparks.length > 0 && (
+      <section class="wrap">
+        <div class="panel" id="spark" style="display:none">
+          <p class="panel-sub">✦ Idea of the day</p>
+          <p
+            class="oneline"
+            id="spark-text"
+            style="font-family:var(--font-serif);font-size:1.3rem;line-height:1.45;border-left:3px solid var(--accent);padding-left:16px;margin:0 0 12px"
+          />
+          <a class="chip" id="spark-link" href="/">—</a>
+        </div>
+        <script
+          type="application/json"
+          id="spark-data"
+          set:html={JSON.stringify(sparks)}
+        />
+        <script is:inline>
+          (function () {
+            try {
+              var data = JSON.parse(
+                document.getElementById('spark-data').textContent,
+              );
+              if (!data.length) return;
+              // Deterministic per-day pick so it rotates daily, not per reload.
+              var day = Math.floor(Date.now() / 86400000);
+              var pick = data[day % data.length];
+              document.getElementById('spark-text').textContent = pick.text;
+              var link = document.getElementById('spark-link');
+              link.textContent = pick.book + ' · ' + pick.author;
+              link.href = '/summaries/' + pick.slug + '/';
+              document.getElementById('spark').style.display = 'block';
+            } catch (e) {}
+          })();
+        </script>
+      </section>
+    )
+  }
+
+  <section class="wrap">
+    <div class="section-head">
+      <h2>Library</h2>
+      <span class="count">{all.length} summaries</span>
+    </div>
+    <div class="grid">
+      {
+        all.map((s) => (
+          <SummaryCard
+            id={s.id}
+            title={s.data.title}
+            author={s.data.author}
+            oneLine={s.data.oneLine}
+            cover={s.data.cover}
+            accent={s.data.accent}
+            readingTime={s.data.readingTime}
+            rating={s.data.rating}
+            topics={s.data.topics}
+          />
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>
