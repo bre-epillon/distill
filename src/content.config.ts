@@ -1,12 +1,19 @@
 import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
+import { RELATIONS } from './lib/relations';
 
 /**
- * The "summaries" collection is the single source of truth for the whole app.
- * Its frontmatter is designed to feed BOTH the reading UI and your analog
- * Zettelkasten: each `keyPrinciples` entry is an atomic note with a stable id,
- * and `connections` are the links between books (your synthesis layer / moat).
+ * Two collections, two node types:
+ *
+ *   sources — a book, article, or video you consumed. Carries provenance.
+ *   notes   — one atomic idea. Carries meaning. This is what the graph draws.
+ *
+ * The split matters: a graph of sources gives you a handful of fat nodes and
+ * vague edges. A graph of notes gives you a thinking tool. Sources only ever
+ * differ in how you cite them (page / timestamp / URL) — never in note shape,
+ * which is what lets a video note and a book note connect as equals.
  */
+
 const summaries = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/summaries' }),
   schema: z.object({
@@ -17,6 +24,14 @@ const summaries = defineCollection({
     oneLine: z.string(),
     // Longer teaser used on the library cards.
     summary: z.string().optional(),
+
+    // --- Provenance ---
+    // The medium. Only affects how a note cites this source, never how the
+    // note itself is modelled.
+    kind: z.enum(['book', 'article', 'video']).default('book'),
+    // Where to find the original (article permalink, video URL). Books usually
+    // have none, which is fine.
+    sourceUrl: z.string().url().optional(),
 
     // --- Presentation ---
     // An emoji or short glyph used as a lightweight "cover".
@@ -31,23 +46,13 @@ const summaries = defineCollection({
     rating: z.number().min(1).max(5).optional(),
     // When you published the summary (drives ordering + "new" badges).
     publishDate: z.coerce.date(),
-    // When you actually read the book (optional, for your own records).
+    // When you actually consumed the source (optional, for your own records).
     readDate: z.coerce.date().optional(),
     draft: z.boolean().default(false),
 
-    // --- Zettelkasten wiring ---
-    // Atomic, linkable notes. `id` should be stable so you can reference it
-    // from your analog cards and from spaced-repetition later.
-    keyPrinciples: z
-      .array(
-        z.object({
-          id: z.string(),
-          text: z.string(),
-        }),
-      )
-      .default([]),
-    // Cross-book connections — the synthesis that no summary app does well.
-    // `slug` points at another summary; `note` explains the link.
+    // Source-level narrative links. These are the essay-length "how do these
+    // two books argue with each other" notes — deliberately kept separate from
+    // note-level links, which are precise and typed.
     connections: z
       .array(
         z.object({
@@ -59,4 +64,36 @@ const summaries = defineCollection({
   }),
 });
 
-export const collections = { summaries };
+const notes = defineCollection({
+  loader: glob({ pattern: '**/*.md', base: './src/content/notes' }),
+  schema: z.object({
+    // The whole note in one sentence, in your own words. This is the node
+    // label in the graph, so if it needs an "and", it's probably two notes.
+    claim: z.string(),
+
+    // Which sources this idea came from — ids in the `summaries` collection.
+    // Empty means it's your own thought, which is the goal state for the best
+    // notes and the reason this isn't a required field.
+    sources: z.array(z.string()).default([]),
+    // How to find it again in the original: "p. 84", "ch. 3", "18:42".
+    locator: z.string().optional(),
+
+    topics: z.array(z.string()).default([]),
+
+    // Typed, directed edges. Declare each link once, on whichever side reads
+    // more naturally — backlinks are computed at build time.
+    links: z
+      .array(
+        z.object({
+          to: z.string(), // id of another note
+          rel: z.enum(RELATIONS),
+          note: z.string().optional(), // why this edge exists
+        }),
+      )
+      .default([]),
+
+    draft: z.boolean().default(false),
+  }),
+});
+
+export const collections = { summaries, notes };

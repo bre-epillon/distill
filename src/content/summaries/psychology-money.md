@@ -13,12 +13,9 @@ rating: 4             # optional, your personal 1–5
 publishDate: 2026-01-01   # when you publish the summary (drives ordering)
 readDate: 2026-01-01      # optional, when you read the book
 
-# Atomic notes — each becomes a card in your Zettelkasten.
-# Give every one a stable `id` so you can cite it from analog cards
-# and (later) resurface it via spaced repetition.
-keyPrinciples:
-  - id: short-stable-slug
-    text: "A single, self-contained idea stated in your own words."
+# Atomic notes now live as their own files in src/content/notes/, one per
+# idea, with `sources: ["psychology-money"]`. They're pulled in here
+# automatically — nothing to list in this file.
 
 connections:
   - slug: great-mental-models-1

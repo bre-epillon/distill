@@ -3,6 +3,7 @@ title: Clear Thinking
 author: Shane Parrish
 oneLine: The moment before a decision is where your life is actually decided — most of us miss it entirely.
 summary: Parrish argues the highest-leverage skill isn't better reasoning, but noticing the ordinary moments that quietly set up your worst decisions before you know a decision is being made.
+kind: book
 cover: "🧭"
 accent: "#4f46e5"
 topics: ["decision-making", "cognition", "habits"]
@@ -10,15 +11,6 @@ readingTime: 8
 rating: 4
 publishDate: 2026-08-10
 readDate: 2026-07-01
-keyPrinciples:
-  - id: default-not-choice
-    text: "Most decisions are made by defaults, not by choice. The work is to convert automatic reactions into deliberate ones."
-  - id: the-space
-    text: "Between stimulus and response there is a space. Skill is widening that space enough to step into it on purpose."
-  - id: build-guardrails
-    text: "Don't rely on in-the-moment willpower. Build environments and rules that make the good decision the automatic one."
-  - id: enemies-of-reason
-    text: "Ego, emotion, social pressure, and inertia are the four default drivers that hijack a decision before reasoning starts."
 connections:
   - slug: principles
     note: "Dalio's answer to Parrish's 'defaults' is systematic: turn recurring decisions into written, testable principles so you're not re-deciding from scratch each time."

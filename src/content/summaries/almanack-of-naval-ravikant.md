@@ -3,6 +3,7 @@ title: The Almanack of Naval Ravikant
 author: Eric Jorgenson
 oneLine: Wealth is what works while you sleep; happiness is a skill you practice — and neither is luck if you set them up right.
 summary: A curated compilation of Naval's thinking on building wealth without luck and building a calm mind, organized into two arcs — leverage and peace — that turn out to be the same argument aimed at different targets.
+kind: book
 cover: "🧘"
 accent: "#0ea5a4"
 topics: ["wealth", "leverage", "happiness", "decision-making"]
@@ -10,17 +11,6 @@ readingTime: 7
 rating: 5
 publishDate: 2026-08-14
 readDate: 2026-07-20
-keyPrinciples:
-  - id: specific-knowledge
-    text: "Build specific knowledge — the stuff that can't be trained, only found by following genuine curiosity. It feels like play to you and looks like work to others."
-  - id: permissionless-leverage
-    text: "The new leverage is code and media: products with no marginal cost of replication that work while you sleep and need no one's permission."
-  - id: accountability
-    text: "Take accountability under your own name. The upside of being wrong is capped; the upside of being right, publicly, compounds."
-  - id: happiness-is-skill
-    text: "Happiness is not something you find, it's a skill you develop — largely the skill of wanting less and being present, not acquiring more."
-  - id: play-long-games
-    text: "Play long-term games with long-term people. Compounding — of money, trust, and knowledge — only works if you don't reset the board."
 connections:
   - slug: principles
     note: "Dalio and Naval both worship compounding, but disagree on method: Dalio wants a machine of principles and radical transparency; Naval wants leverage and a quiet mind. Two routes up the same mountain."
