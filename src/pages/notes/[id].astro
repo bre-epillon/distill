@@ -1,0 +1,104 @@
+---
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { INVERSE_LABEL, RELATION_COLOR } from '../../lib/relations';
+import { buildGraph, neighborsOf } from '../../lib/graph';
+
+export async function getStaticPaths() {
+  const { notes, nodes, edges } = await buildGraph();
+  return notes.map((entry) => ({
+    params: { id: entry.id },
+    props: { entry, nodes, edges },
+  }));
+}
+
+const { entry, nodes, edges } = Astro.props;
+const { Content } = await render(entry);
+const node = nodes.find((n) => n.id === entry.id)!;
+const { outgoing, incoming } = neighborsOf(entry.id, edges, nodes);
+---
+
+<BaseLayout title={`${entry.id} — Distil`} description={entry.data.claim}>
+  <article class="reader note-page" style={`--accent:${node.accent}`}>
+    <a class="back" href="/graph">← Graph</a>
+
+    <span class="kicker">Note · {entry.id}</span>
+
+    <p class="oneline note-claim">{entry.data.claim}</p>
+
+    <div class="readmeta">
+      {
+        node.sources.map((s) => (
+          <a class="chip neutral" href={`/summaries/${s.id}/`}>
+            {s.cover} {s.title}
+          </a>
+        ))
+      }
+      {node.sources.length === 0 && <span>Your own note</span>}
+      {entry.data.locator && <span>{entry.data.locator}</span>}
+      <div class="chips" style="gap:6px">
+        {
+          entry.data.topics.map((t) => (
+            <a
+              class="chip"
+              href={`/topics/${t.replace(/\s+/g, '-').toLowerCase()}/`}
+            >
+              {t}
+            </a>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    {
+      (outgoing.length > 0 || incoming.length > 0) && (
+        <div class="panel">
+          <h2>Links</h2>
+          <p class="panel-sub">
+            Typed edges. Anything below the line was authored on the other note
+            and derived here.
+          </p>
+          {outgoing.map((e) => (
+            <a class="connection edge" href={`/notes/${e.other.id}/`}>
+              <span class="ctitle">
+                <span class="reltag" style={`color:${RELATION_COLOR[e.rel]}`}>
+                  {e.rel} →
+                </span>
+                {e.other.claim}
+              </span>
+              {e.note && <p class="cnote">{e.note}</p>}
+            </a>
+          ))}
+          {incoming.length > 0 && <hr class="edge-split" />}
+          {incoming.map((e) => (
+            <a class="connection edge" href={`/notes/${e.other.id}/`}>
+              <span class="ctitle">
+                <span class="reltag" style={`color:${RELATION_COLOR[e.rel]}`}>
+                  ← {INVERSE_LABEL[e.rel]}
+                </span>
+                {e.other.claim}
+              </span>
+              {e.note && <p class="cnote">{e.note}</p>}
+            </a>
+          ))}
+        </div>
+      )
+    }
+
+    {
+      outgoing.length === 0 && incoming.length === 0 && (
+        <div class="panel">
+          <h2>No links yet</h2>
+          <p class="panel-sub" style="margin:0">
+            An unlinked note is an idea you haven't finished thinking about. What
+            does it extend, support, or contradict?
+          </p>
+        </div>
+      )
+    }
+  </article>
+</BaseLayout>

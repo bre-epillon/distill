@@ -3,6 +3,7 @@ title: Principles
 author: Ray Dalio
 oneLine: Treat your life and work as a machine you can debug — pain plus reflection is the compiler.
 summary: "Dalio's case that success is not a series of good calls but a system: write down principles, treat mistakes as data, seek out people who'll tell you you're wrong, and let the machine improve itself."
+kind: book
 cover: "⚙️"
 accent: "#e0672f"
 topics: ["decision-making", "systems", "leadership", "learning"]
@@ -10,17 +11,6 @@ readingTime: 9
 rating: 4
 publishDate: 2026-08-16
 readDate: 2026-06-10
-keyPrinciples:
-  - id: pain-plus-reflection
-    text: "Pain + Reflection = Progress. Pain is information about a gap between reality and your model; reflection converts it into an updated principle."
-  - id: principles-as-code
-    text: "Write your recurring decisions down as principles. A decision made once and codified stops costing you willpower and starts compounding."
-  - id: radical-transparency
-    text: "Radical truth and radical transparency: surface disagreement instead of hiding it, because the cost of being wrong quietly is far higher than the discomfort of being corrected loudly."
-  - id: believability-weighted
-    text: "Weight opinions by believability, not seniority or volume. Track records, not titles, should decide whose view counts most on a given question."
-  - id: two-yous
-    text: "There are two 'yous': the emotional actor and the rational designer. Step out and design the machine that the emotional you then operates."
 connections:
   - slug: clear-thinking
     note: "Where Parrish teaches you to notice a single default in the moment, Dalio industrializes it: encode the response once as a written principle so the moment never gets a vote again."

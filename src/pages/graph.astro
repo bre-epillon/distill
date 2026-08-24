@@ -1,0 +1,571 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { RELATIONS, RELATION_COLOR } from '../lib/relations';
+import { buildGraph } from '../lib/graph';
+
+const { nodes, edges, dangling } = await buildGraph();
+
+// Only offer topics that actually appear, sorted by how much you write about them.
+const topicCounts = new Map<string, number>();
+for (const n of nodes) {
+  for (const t of n.topics) topicCounts.set(t, (topicCounts.get(t) ?? 0) + 1);
+}
+const topics = [...topicCounts.entries()].sort(
+  (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+);
+
+const relCounts = Object.fromEntries(
+  RELATIONS.map((r) => [r, edges.filter((e) => e.rel === r).length]),
+);
+
+const payload = {
+  nodes: nodes.map((n) => ({
+    id: n.id,
+    claim: n.claim,
+    accent: n.accent,
+    topics: n.topics,
+    sources: n.sources,
+    degree: n.degree,
+  })),
+  edges,
+  colors: RELATION_COLOR,
+};
+
+const orphans = nodes.filter((n) => n.degree === 0);
+---
+
+<BaseLayout
+  title="Graph — Distil"
+  description="Every atomic idea in the library, and the typed links between them."
+>
+  <section class="wrap">
+    <div class="graph-head">
+      <div>
+        <h1>The graph</h1>
+        <p>
+          Every node is one atomic idea. Every edge is a claim about how two
+          ideas relate — so the shape of the graph is an argument, not just a
+          picture. Drag to explore, scroll to zoom, click a node to read it.
+        </p>
+      </div>
+      <div class="graph-stats">
+        <div><strong>{nodes.length}</strong><span>notes</span></div>
+        <div><strong>{edges.length}</strong><span>links</span></div>
+        <div><strong>{topics.length}</strong><span>topics</span></div>
+      </div>
+    </div>
+
+    <div class="graph-controls">
+      <div class="chips" id="rel-filters">
+        {
+          RELATIONS.map((r) => (
+            <button
+              class="chip rel-chip"
+              type="button"
+              data-rel={r}
+              aria-pressed="true"
+              style={`--rel:${RELATION_COLOR[r]}`}
+            >
+              <span class="swatch" />
+              {r}
+              <span class="relcount">{relCounts[r]}</span>
+            </button>
+          ))
+        }
+      </div>
+      <label class="graph-select">
+        Topic
+        <select id="topic-filter">
+          <option value="">all</option>
+          {
+            topics.map(([t, c]) => (
+              <option value={t}>
+                {t} ({c})
+              </option>
+            ))
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="graph-stage">
+      <canvas id="graph-canvas"></canvas>
+      <aside class="graph-inspector" id="inspector" aria-live="polite">
+        <p class="inspector-hint">Hover a node.</p>
+      </aside>
+      <button class="graph-reset" id="graph-reset" type="button">Recenter</button>
+    </div>
+
+    {
+      (orphans.length > 0 || dangling.length > 0) && (
+        <div class="panel graph-todo">
+          <h2>Loose ends</h2>
+          <p class="panel-sub">
+            The most useful view in a Zettelkasten — unconnected ideas are ideas
+            you haven't finished thinking about.
+          </p>
+          {orphans.length > 0 && (
+            <p class="loose">
+              <strong>{orphans.length} unlinked</strong>
+              {orphans.map((o) => (
+                <a class="chip neutral" href={`/notes/${o.id}/`}>
+                  {o.id}
+                </a>
+              ))}
+            </p>
+          )}
+          {dangling.length > 0 && (
+            <p class="loose">
+              <strong>{dangling.length} link{dangling.length === 1 ? '' : 's'} to notes that don't exist yet</strong>
+              {dangling.map((d) => (
+                <span class="chip neutral">
+                  {d.from} → {d.to}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+      )
+    }
+  </section>
+
+  <script
+    type="application/json"
+    id="graph-data"
+    set:html={JSON.stringify(payload)}
+  />
+
+  <script is:inline>
+    (function () {
+      var canvas = document.getElementById('graph-canvas');
+      var dataEl = document.getElementById('graph-data');
+      if (!canvas || !dataEl) return;
+
+      var data = JSON.parse(dataEl.textContent);
+      var COLORS = data.colors;
+      var ctx = canvas.getContext('2d');
+
+      // ---- model -------------------------------------------------------
+      // Deterministic golden-angle seeding: same layout on every reload, so
+      // you build spatial memory of where your ideas live.
+      var GOLDEN = Math.PI * (3 - Math.sqrt(5));
+      var nodes = data.nodes.map(function (n, i) {
+        var r = 26 * Math.sqrt(i + 1);
+        return {
+          id: n.id,
+          claim: n.claim,
+          accent: n.accent,
+          topics: n.topics,
+          sources: n.sources,
+          label: n.id.replace(/-/g, ' '),
+          radius: Math.min(22, 6 + n.degree * 2.2),
+          x: Math.cos(i * GOLDEN) * r,
+          y: Math.sin(i * GOLDEN) * r,
+          vx: 0,
+          vy: 0,
+        };
+      });
+      var index = {};
+      nodes.forEach(function (n, i) {
+        index[n.id] = i;
+      });
+      var edges = data.edges
+        .filter(function (e) {
+          return index[e.from] !== undefined && index[e.to] !== undefined;
+        })
+        .map(function (e) {
+          return {
+            rel: e.rel,
+            note: e.note,
+            s: nodes[index[e.from]],
+            t: nodes[index[e.to]],
+          };
+        });
+
+      // adjacency, for hover dimming
+      var adj = {};
+      nodes.forEach(function (n) {
+        adj[n.id] = {};
+      });
+      edges.forEach(function (e) {
+        adj[e.s.id][e.t.id] = true;
+        adj[e.t.id][e.s.id] = true;
+      });
+
+      // ---- view state --------------------------------------------------
+      var view = { x: 0, y: 0, k: 1 };
+      var hidden = {};
+      var topic = '';
+      var hover = null;
+      var dragNode = null;
+      var panning = false;
+      var last = { x: 0, y: 0 };
+      var pointers = new Map();
+      var pinch = null;
+      var moved = 0;
+      var alpha = 1;
+      var W = 0,
+        H = 0;
+
+      function visibleEdge(e) {
+        return !hidden[e.rel];
+      }
+      function dimmed(n) {
+        if (topic && n.topics.indexOf(topic) === -1) return true;
+        if (hover && n !== hover && !adj[hover.id][n.id]) return true;
+        return false;
+      }
+
+      function resize() {
+        var rect = canvas.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        W = rect.width;
+        H = rect.height;
+        canvas.width = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      // ---- simulation --------------------------------------------------
+      var LINK_LEN = 130;
+      function step() {
+        if (alpha > 0.005) {
+          // repulsion — O(n²) is fine at Zettelkasten scale
+          for (var i = 0; i < nodes.length; i++) {
+            for (var j = i + 1; j < nodes.length; j++) {
+              var a = nodes[i],
+                b = nodes[j];
+              var dx = b.x - a.x,
+                dy = b.y - a.y;
+              var d2 = dx * dx + dy * dy || 0.01;
+              if (d2 > 360000) continue;
+              var d = Math.sqrt(d2);
+              var f = (2600 / d2) * alpha;
+              var ux = (dx / d) * f,
+                uy = (dy / d) * f;
+              a.vx -= ux;
+              a.vy -= uy;
+              b.vx += ux;
+              b.vy += uy;
+            }
+          }
+          // springs along visible edges
+          for (var k = 0; k < edges.length; k++) {
+            var e = edges[k];
+            if (!visibleEdge(e)) continue;
+            var ex = e.t.x - e.s.x,
+              ey = e.t.y - e.s.y;
+            var ed = Math.sqrt(ex * ex + ey * ey) || 0.01;
+            var force = ((ed - LINK_LEN) / ed) * 0.045 * alpha;
+            var fx = ex * force,
+              fy = ey * force;
+            e.s.vx += fx;
+            e.s.vy += fy;
+            e.t.vx -= fx;
+            e.t.vy -= fy;
+          }
+          // gentle pull to origin so nothing drifts off-canvas
+          for (var m = 0; m < nodes.length; m++) {
+            var n = nodes[m];
+            n.vx -= n.x * 0.0022 * alpha;
+            n.vy -= n.y * 0.0022 * alpha;
+            if (n === dragNode) {
+              n.vx = 0;
+              n.vy = 0;
+              continue;
+            }
+            n.vx *= 0.86;
+            n.vy *= 0.86;
+            n.x += n.vx;
+            n.y += n.vy;
+          }
+          alpha *= 0.992;
+        }
+        draw();
+        requestAnimationFrame(step);
+      }
+
+      // ---- drawing -----------------------------------------------------
+      function toScreen(n) {
+        return {
+          x: (n.x + view.x) * view.k + W / 2,
+          y: (n.y + view.y) * view.k + H / 2,
+        };
+      }
+      function css(name) {
+        return getComputedStyle(document.documentElement)
+          .getPropertyValue(name)
+          .trim();
+      }
+
+      function draw() {
+        var text = css('--text') || '#16161a';
+        var faint = css('--text-faint') || '#9a9aa4';
+        ctx.clearRect(0, 0, W, H);
+
+        // edges
+        for (var i = 0; i < edges.length; i++) {
+          var e = edges[i];
+          if (!visibleEdge(e)) continue;
+          var lit = hover && (e.s === hover || e.t === hover);
+          var faded = dimmed(e.s) || dimmed(e.t);
+          var a = toScreen(e.s),
+            b = toScreen(e.t);
+          var dx = b.x - a.x,
+            dy = b.y - a.y;
+          var d = Math.sqrt(dx * dx + dy * dy) || 1;
+          var ux = dx / d,
+            uy = dy / d;
+          // stop short of the node so the arrowhead reads cleanly
+          var pad = e.t.radius * view.k + 5;
+          var ex = b.x - ux * pad,
+            ey = b.y - uy * pad;
+
+          ctx.globalAlpha = faded ? 0.06 : lit ? 1 : 0.4;
+          ctx.strokeStyle = COLORS[e.rel];
+          ctx.lineWidth = lit ? 2.2 : 1.3;
+          ctx.beginPath();
+          ctx.moveTo(a.x + ux * (e.s.radius * view.k + 2), a.y + uy * (e.s.radius * view.k + 2));
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+
+          // arrowhead — edges are directed, and the direction carries meaning
+          var ah = lit ? 8 : 6;
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - ux * ah - uy * ah * 0.5, ey - uy * ah + ux * ah * 0.5);
+          ctx.lineTo(ex - ux * ah + uy * ah * 0.5, ey - uy * ah - ux * ah * 0.5);
+          ctx.closePath();
+          ctx.fillStyle = COLORS[e.rel];
+          ctx.fill();
+        }
+
+        // nodes
+        for (var j = 0; j < nodes.length; j++) {
+          var n = nodes[j];
+          var p = toScreen(n);
+          var r = n.radius * view.k;
+          var faded2 = dimmed(n);
+          ctx.globalAlpha = faded2 ? 0.12 : 1;
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = n.accent;
+          ctx.fill();
+          if (n === hover) {
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = text;
+            ctx.stroke();
+          }
+
+          if (view.k > 0.55 && !faded2) {
+            ctx.globalAlpha = n === hover ? 1 : 0.8;
+            ctx.fillStyle = n === hover ? text : faint;
+            ctx.font =
+              (n === hover ? '600 ' : '') +
+              Math.max(10, 11 * Math.min(view.k, 1.4)) +
+              'px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(n.label, p.x, p.y + r + 5);
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // ---- hit testing / interaction ------------------------------------
+      function at(mx, my) {
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var p = toScreen(nodes[i]);
+          var r = Math.max(9, nodes[i].radius * view.k);
+          if ((mx - p.x) * (mx - p.x) + (my - p.y) * (my - p.y) <= r * r)
+            return nodes[i];
+        }
+        return null;
+      }
+      function pos(ev) {
+        var rect = canvas.getBoundingClientRect();
+        return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+      }
+
+      var inspector = document.getElementById('inspector');
+      function renderInspector(n) {
+        if (!n) {
+          inspector.innerHTML = '<p class="inspector-hint">Hover a node.</p>';
+          return;
+        }
+        var rels = edges
+          .filter(function (e) {
+            return visibleEdge(e) && (e.s === n || e.t === n);
+          })
+          .map(function (e) {
+            var out = e.s === n;
+            return (
+              '<li><span class="reltag" style="color:' +
+              COLORS[e.rel] +
+              '">' +
+              (out ? '' : '← ') +
+              e.rel +
+              (out ? ' →' : '') +
+              '</span> ' +
+              esc((out ? e.t : e.s).label) +
+              '</li>'
+            );
+          })
+          .join('');
+        var src = n.sources
+          .map(function (s) {
+            return esc(s.cover + ' ' + s.title);
+          })
+          .join(' · ');
+        inspector.innerHTML =
+          '<p class="inspector-claim">' +
+          esc(n.claim) +
+          '</p>' +
+          (src ? '<p class="inspector-src">' + src + '</p>' : '<p class="inspector-src">your own note</p>') +
+          (rels ? '<ul class="inspector-rels">' + rels + '</ul>' : '') +
+          '<a class="chip" href="/notes/' + encodeURIComponent(n.id) + '/">Open note →</a>';
+      }
+      function esc(s) {
+        return String(s).replace(/[&<>"]/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+      }
+
+      // Pointer events rather than mouse events, so the graph is usable by
+      // touch: one finger pans or drags a node, two fingers pinch to zoom.
+      canvas.addEventListener('pointerdown', function (ev) {
+        canvas.setPointerCapture(ev.pointerId);
+        var p = pos(ev);
+        pointers.set(ev.pointerId, p);
+
+        if (pointers.size === 2) {
+          var pts = Array.from(pointers.values());
+          pinch = {
+            dist:
+              Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 1,
+            k: view.k,
+          };
+          dragNode = null;
+          panning = false;
+          return;
+        }
+
+        moved = 0;
+        var n = at(p.x, p.y);
+        if (n) {
+          dragNode = n;
+          alpha = Math.max(alpha, 0.4);
+        } else {
+          panning = true;
+        }
+        last = p;
+      });
+
+      canvas.addEventListener('pointermove', function (ev) {
+        var p = pos(ev);
+        if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, p);
+
+        if (pinch && pointers.size >= 2) {
+          var pts = Array.from(pointers.values());
+          var d = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+          view.k = Math.min(3, Math.max(0.25, (pinch.k * d) / pinch.dist));
+          return;
+        }
+
+        // No button held: this is a hover, which only exists for a mouse.
+        if (pointers.size === 0) {
+          var h = at(p.x, p.y);
+          if (h !== hover) {
+            hover = h;
+            renderInspector(h);
+            canvas.style.cursor = h ? 'pointer' : 'grab';
+          }
+          last = p;
+          return;
+        }
+
+        moved += Math.abs(p.x - last.x) + Math.abs(p.y - last.y);
+        if (dragNode) {
+          dragNode.x += (p.x - last.x) / view.k;
+          dragNode.y += (p.y - last.y) / view.k;
+          alpha = Math.max(alpha, 0.3);
+        } else if (panning) {
+          view.x += (p.x - last.x) / view.k;
+          view.y += (p.y - last.y) / view.k;
+        }
+        last = p;
+      });
+
+      function endPointer(ev) {
+        if (!pointers.has(ev.pointerId)) return;
+        pointers.delete(ev.pointerId);
+        if (pointers.size < 2) pinch = null;
+        if (pointers.size > 0) return;
+
+        dragNode = null;
+        panning = false;
+        if (moved >= 8) return;
+
+        var p = pos(ev);
+        var n = at(p.x, p.y);
+        // A mouse click opens the note; a tap selects it first, so you can read
+        // the claim before committing to a page load.
+        if (n && ev.pointerType === 'mouse') {
+          window.location.href = '/notes/' + encodeURIComponent(n.id) + '/';
+          return;
+        }
+        hover = n;
+        renderInspector(n);
+      }
+      canvas.addEventListener('pointerup', endPointer);
+      canvas.addEventListener('pointercancel', endPointer);
+      canvas.addEventListener('pointerleave', function (ev) {
+        if (ev.pointerType === 'mouse' && pointers.size === 0) {
+          hover = null;
+          renderInspector(null);
+        }
+      });
+      canvas.addEventListener(
+        'wheel',
+        function (ev) {
+          ev.preventDefault();
+          var f = Math.pow(1.0015, -ev.deltaY);
+          view.k = Math.min(3, Math.max(0.25, view.k * f));
+        },
+        { passive: false },
+      );
+
+      // ---- filters ------------------------------------------------------
+      var relBar = document.getElementById('rel-filters');
+      relBar.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('.rel-chip');
+        if (!btn) return;
+        var rel = btn.dataset.rel;
+        hidden[rel] = !hidden[rel];
+        btn.setAttribute('aria-pressed', hidden[rel] ? 'false' : 'true');
+        alpha = Math.max(alpha, 0.6);
+        if (hover) renderInspector(hover);
+      });
+      document
+        .getElementById('topic-filter')
+        .addEventListener('change', function (ev) {
+          topic = ev.target.value;
+        });
+      document
+        .getElementById('graph-reset')
+        .addEventListener('click', function () {
+          view = { x: 0, y: 0, k: 1 };
+          alpha = 1;
+        });
+
+      window.addEventListener('resize', function () {
+        resize();
+        draw();
+      });
+      resize();
+      draw(); // paint the seeded layout immediately, before the first frame
+      requestAnimationFrame(step);
+    })();
+  </script>
+</BaseLayout>

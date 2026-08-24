@@ -3,50 +3,90 @@ import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SummaryCard from '../../components/SummaryCard.astro';
 
-const slug = (t: string) => t.replace(/\s+/g, '-').toLowerCase();
-
 export async function getStaticPaths() {
   const all = (await getCollection('summaries')).filter((s) => !s.data.draft);
-  const map = new Map<string, { label: string; items: typeof all }>();
-  for (const s of all) {
-    for (const t of s.data.topics) {
-      const key = t.replace(/\s+/g, '-').toLowerCase();
-      if (!map.has(key)) map.set(key, { label: t, items: [] });
-      map.get(key)!.items.push(s);
-    }
-  }
-  return [...map.entries()].map(([topic, { label, items }]) => ({
+  const notes = (await getCollection('notes')).filter((n) => !n.data.draft);
+  const key = (t: string) => t.replace(/\s+/g, '-').toLowerCase();
+
+  // A topic can be introduced by a note alone, so both collections seed the
+  // path list — otherwise a note's topic chip would link to a 404.
+  const map = new Map<
+    string,
+    { label: string; items: typeof all; noteItems: typeof notes }
+  >();
+  const bucket = (t: string) => {
+    const k = key(t);
+    if (!map.has(k)) map.set(k, { label: t, items: [], noteItems: [] });
+    return map.get(k)!;
+  };
+  for (const s of all) for (const t of s.data.topics) bucket(t).items.push(s);
+  for (const n of notes)
+    for (const t of n.data.topics) bucket(t).noteItems.push(n);
+
+  return [...map.entries()].map(([topic, { label, items, noteItems }]) => ({
     params: { topic },
-    props: { label, items },
+    props: { label, items, noteItems },
   }));
 }
 
-const { label, items } = Astro.props;
+const { label, items, noteItems } = Astro.props;
+const counts = [
+  items.length && `${items.length} ${items.length === 1 ? 'source' : 'sources'}`,
+  noteItems.length &&
+    `${noteItems.length} ${noteItems.length === 1 ? 'note' : 'notes'}`,
+]
+  .filter(Boolean)
+  .join(' · ');
 ---
 
 <BaseLayout title={`${label} — Distil`}>
   <section class="wrap hero">
     <a class="back" href="/topics">← Topics</a>
     <h1>{label}</h1>
-    <p>{items.length} {items.length === 1 ? 'summary' : 'summaries'} on this topic.</p>
+    <p>{counts} on this topic.</p>
   </section>
-  <section class="wrap">
-    <div class="grid">
-      {
-        items.map((s) => (
-          <SummaryCard
-            id={s.id}
-            title={s.data.title}
-            author={s.data.author}
-            oneLine={s.data.oneLine}
-            cover={s.data.cover}
-            accent={s.data.accent}
-            readingTime={s.data.readingTime}
-            rating={s.data.rating}
-            topics={s.data.topics}
-          />
-        ))
-      }
-    </div>
-  </section>
+
+  {
+    items.length > 0 && (
+      <section class="wrap">
+        <div class="grid">
+          {items.map((s) => (
+            <SummaryCard
+              id={s.id}
+              title={s.data.title}
+              author={s.data.author}
+              oneLine={s.data.oneLine}
+              cover={s.data.cover}
+              accent={s.data.accent}
+              readingTime={s.data.readingTime}
+              rating={s.data.rating}
+              topics={s.data.topics}
+            />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  {
+    noteItems.length > 0 && (
+      <section class="wrap">
+        <div class="section-head">
+          <h2>Ideas</h2>
+          <span class="count">{noteItems.length} notes</span>
+        </div>
+        <div class="panel" style="margin-top:0">
+          {noteItems.map((n) => (
+            <a class="principle principle-link" href={`/notes/${n.id}/`}>
+              <span class="num">✦</span>
+              <p class="ptext">
+                {n.data.claim}
+                <span class="pid">#{n.id}</span>
+              </p>
+            </a>
+          ))}
+        </div>
+      </section>
+    )
+  }
 </BaseLayout>

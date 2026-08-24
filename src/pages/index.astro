@@ -7,17 +7,21 @@ const all = (await getCollection('summaries'))
   .filter((s) => !s.data.draft)
   .sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf());
 
-// Flatten every atomic principle across every book — this feeds the
-// "Idea of the day" engagement hook (a daily-rotating spark).
-const sparks = all.flatMap((s) =>
-  s.data.keyPrinciples.map((p) => ({
-    text: p.text,
-    book: s.data.title,
-    author: s.data.author,
-    slug: s.id,
-    accent: s.data.accent,
-  })),
-);
+// Every atomic note, across every source — this feeds the "Idea of the day"
+// engagement hook (a daily-rotating spark).
+const byId = new Map(all.map((s) => [s.id, s.data]));
+const sparks = (await getCollection('notes'))
+  .filter((n) => !n.data.draft)
+  .map((n) => {
+    const src = n.data.sources.map((id) => byId.get(id)).find(Boolean);
+    return {
+      text: n.data.claim,
+      book: src?.title ?? 'Your own note',
+      author: src?.author ?? '',
+      id: n.id,
+      accent: src?.accent ?? '#6b6b76',
+    };
+  });
 ---
 
 <BaseLayout title="Distil — a library of distilled ideas">
@@ -58,8 +62,9 @@ const sparks = all.flatMap((s) =>
               var pick = data[day % data.length];
               document.getElementById('spark-text').textContent = pick.text;
               var link = document.getElementById('spark-link');
-              link.textContent = pick.book + ' · ' + pick.author;
-              link.href = '/summaries/' + pick.slug + '/';
+              link.textContent =
+                pick.book + (pick.author ? ' · ' + pick.author : '');
+              link.href = '/notes/' + pick.id + '/';
               document.getElementById('spark').style.display = 'block';
             } catch (e) {}
           })();
